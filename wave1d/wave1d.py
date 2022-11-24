@@ -31,7 +31,7 @@ def solver(I, V, f, c, bd_0, bd_L, L, T, dt, C, callback=None, stability_safety_
     if isinstance(c, (float, int)):
         q = np.full(Nx + 1, c * c, dtype='float64')
     elif callable(c):
-        cs = c(xs)
+        cs = np.vectorize(c)(xs).astype('float64')
         q = cs * cs
     dt2 = dt * dt
     C2 = dt2 / (dx * dx)
@@ -149,7 +149,7 @@ class PlotAndStoreSolution:
         # Animate
         if n % self.skip_frame != 0:
             return
-        title = f"t={t[n]:.3f}"
+        title = f"Nx={x.size - 1}"
         if self.title:
             title = self.title + ' ' + title
         if n == 0:
@@ -167,12 +167,108 @@ class PlotAndStoreSolution:
 
         self.plt.savefig(f"{self.casename}_{n:>04}.png")
 
+        if n == len(t) - 1:
+            self.plt.close()
+
     def saveVideo(self):
         filespec = f"{self.casename}_%04d.png"
         movie_program = 'ffmpeg'
         cmd = f"{movie_program} -hide_banner -loglevel warning -y -r {self.framerate} -i {filespec} -vcodec libx264 {self.casename}.mp4"
         os.system(cmd)
 
+
+class PlotVariableSpeed(PlotAndStoreSolution):
+    def __init__(self, medium, **kwargs):
+        self.medium = medium
+        PlotAndStoreSolution.__init__(self, **kwargs)
+
+    def __call__(self, u, x, t, n):
+        # Save solution u to a file using numpy.savez
+        if self.filename is not None:
+            name = f"u{n:>04}"
+            kwargs = {name: u}
+            fname = '.' + self.filename + '_' + name + '.dat'
+            np.savez(fname, **kwargs)
+            self.t.append(t[n])
+            if n == 0:
+                np.savez('.' + self.filename + '_x.dat', x=x)
+
+        # Animate
+        if n % self.skip_frame != 0:
+            return
+
+        x_L, x_R = self.medium
+        umin, umax = self.yaxis
+
+        title = f"Nx={x.size - 1}"
+        if self.title:
+            title = self.title + ' ' + title
+        if n == 0:
+            self.plt.ion()
+            self.lines = self.plt.plot(
+                x, u, 'r-',
+                [x_L, x_L], [umin, umax], 'k--',
+                [x_R, x_R], [umin, umax], 'k--')
+            self.plt.axis([x[0], x[-1], umin, umax])
+            self.plt.xlabel('x')
+            self.plt.ylabel('u')
+            self.plt.title(title)
+            self.plt.legend([f"t={t[n]:.3f}"], loc='lower left')
+        else:
+            self.lines[0].set_ydata(u)
+            self.plt.legend([f"t={t[n]:.3f}"], loc='lower left')
+            self.plt.draw()
+
+        self.plt.savefig(f"{self.casename}_{n:>04}.png")
+
+        if n == len(t) - 1:
+            self.plt.close()
+
+def pulse(
+        C=1,
+        Nx=200,
+        T=2,
+        loc='left',
+        pulse_type='gaussian',
+        slowness_factor=2,
+        medium=[0.7, 0.9],
+        skip_frame=1,
+        sigma=0.05):
+    L = 1.0
+    c_0 = 1.0
+    if loc == 'center':
+        xc = L / 2
+    elif loc == 'left':
+        xc = 0
+
+    if pulse_type == 'gaussian':
+        I = lambda x: np.exp(-0.5*((x - xc) / sigma)**2)
+    elif pulse_type == 'plug':
+        I = lambda x: 0 if abs(x - xc) > sigma else 1
+    elif pulse_type == 'cosinehat':
+        I = lambda x: 0.5 * (1 + np.cos(np.pi * (x - xc) / (2 * sigma))) if xc - 2 * sigma <= x <= xc + 2 * sigma else 0
+    elif pulse_type == 'half-cosinehat':
+        I = lambda x: np.cos(np.pi * (x - xc) / (4 * sigma)) if xc - 2 * sigma <= x <= xc + 2 * sigma else 0
+    else:
+        raise ValueError(f"Pulse type {pulse_type} not implemented yet")
+
+    c = lambda x: c_0 / slowness_factor if medium[0] <= x <= medium[1] else c_0
+
+    umin = -0.5
+    umax = 1.5 * I(xc)
+
+    casename = f"{pulse_type}_Nx{Nx}_sf{slowness_factor}"
+
+    plotter = PlotVariableSpeed(medium, casename=casename, umin=umin, umax=umax, skip_frame=skip_frame)
+
+    dt = L / (Nx * c_0)
+
+    _, _, _, cpu = solver(I=I, V=None, f=None, c=c, bd_0=None, bd_L=None, L=L, T=T, dt=dt, C=C, callback=plotter)
+
+    plotter.saveVideo()
+    print(f"cpu: {cpu}")
+
+pulse(pulse_type='cosinehat')
 
 
 def demo_guitar(C):
@@ -200,7 +296,7 @@ def demo_guitar(C):
     print(cpu)
 
 
-
+########## Tests ##########
 
 def test_quadratic():
     """Check that u(x,t)=x(L-x)(1+t/2) is exactly reproduced."""
