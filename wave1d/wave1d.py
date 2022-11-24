@@ -165,49 +165,17 @@ class PlotAndStoreSolution:
             self.plt.legend([f"t={t[n]:.3f}"], loc='lower left')
             self.plt.draw()
 
-        self.plt.savefig(self.casename + f"_{n:>04}.png")
+        self.plt.savefig(f"{self.casename}_{n:>04}.png")
+
+    def saveVideo(self):
+        filespec = f"{self.casename}_%04d.png"
+        movie_program = 'ffmpeg'
+        cmd = f"{movie_program} -hide_banner -loglevel warning -y -r {self.framerate} -i {filespec} -vcodec libx264 {self.casename}.mp4"
+        os.system(cmd)
 
 
-def viz(
-        I, V, f, c, bd_0, bd_L, L, T, dt, C, # PDE parameters
-        umin, umax,                          # Interval for u in plots
-        animate=True,                        # Simulation with animation?
-        solver_function=solver,              # Function with numerical algorithm
-    ):
-    class PlotMatplotlib:
-        def __call__(self, u, x, t, n):
-            if n == 0:
-                plt.ion()
-                self.lines = plt.plot(x, u, 'r-')
-                plt.xlabel('x')
-                plt.ylabel('u')
-                plt.axis([0, L, umin, umax])
-                plt.legend([f"t={t[n]}"], loc='lower left')
-            else:
-                self.lines[0].set_ydata(u)
-                plt.legend([f"t={t[n]}"], loc='lower left')
-                plt.draw()
-            time.sleep(2) if t[n] == 0 else time.sleep(0.2)
-            plt.savefig(f"tmp_{n:>04}.png")
 
-    plot_u = PlotMatplotlib()
-
-    for filename in glob.glob('tmp_*.png'):
-        os.remove(filename)
-
-    callback = plot_u if animate else None
-    u, x, t, cpu = solver_function(I, V, f, c, bd_0, bd_L, L, T, dt, C, callback)
-
-    fps = 4
-    filespec = 'tmp_%04d.png'
-    movie_program = 'ffmpeg'
-    cmd = f"{movie_program} -y -r {fps} -i {filespec} -vcodec libx264 movie.mp4"
-    os.system(cmd)
-
-    return cpu
-
-
-def guitar(C):
+def demo_guitar(C):
     L = 0.75
     x0 = 0.8 * L
     a = 0.005
@@ -226,11 +194,11 @@ def guitar(C):
     umax = -umin
     #cpu = viz(I, 0, 0, c, None, None, L, T, dt, C, umin, umax, solver_function=solver)
 
-    plotter = PlotAndStoreSolution(umin=umin, umax=umax)
-    u, x, t, cpu = solver(I, 0, 0, c, None, None, L, T, dt, C, callback=plotter)
+    plotter = PlotAndStoreSolution(umin=umin, umax=umax, casename='demo_guitar')
+    u, x, t, cpu = solver(I, 0, 0, c, 0, 0, L, T, dt, C, callback=plotter)
+    plotter.saveVideo()
     print(cpu)
 
-#guitar(1)
 
 
 
