@@ -16,15 +16,22 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # in 2D rectangular domain on mesh grid with initial conditions I, V
 # and Dirichlet or Neumann boundary conditions
 def solver(I, V, f, c, bds, Lx, Ly, T, dt, Nx, Ny, callback=None):
-    Nt = int(round(T / dt))
-    ts = np.linspace(0, Nt * dt, Nt + 1)
-
     xs = np.linspace(0, Lx, Nx + 1).reshape((Nx + 1, 1))
     ys = np.linspace(0, Ly, Ny + 1).reshape((1, Ny + 1))
 
-    dt = ts[1] - ts[0]
     dx = xs[1,0] - xs[0,0]
     dy = ys[0,1] - ys[0,0]
+
+
+    stability_limit = (1 / float(c)) / np.sqrt(1 / (dx * dx) + 1 / (dy * dy))
+    if dt <= 0:
+        safety_factor = -dt
+        dt = safety_factor * stability_limit
+    elif dt > stability_limit:
+        print(f"Warning: dt={dt} exceeds the stability limit {stability_limit}")
+
+    Nt = int(round(T / dt))
+    ts = np.linspace(0, Nt * dt, Nt + 1)
 
     if isinstance(c, (float, int)):
         q = np.full((Nx + 3, Ny + 3), c * c, dtype='float64')
@@ -165,9 +172,10 @@ class PlotAndStoreSolution:
             casename='tmp',
             umin=-1, umax=1,
             framerate=4,
-            scale=10,
+            scale=1,
             title='',
             skip_frame=1,
+            threads=1,
             filename=None):
         self.casename = casename
         self.yaxis = [umin, umax]
@@ -175,6 +183,7 @@ class PlotAndStoreSolution:
         self.scale = scale
         self.title = title
         self.skip_frame = skip_frame
+        self.threads = threads
         self.filename = filename
 
         import matplotlib.pyplot as plt
@@ -189,9 +198,10 @@ class PlotAndStoreSolution:
         for f in glob.glob(self.casename + '_*.png'):
             os.remove(f)
 
-        # optimal thread count may differ based on cpu
-        self.ex = ThreadPoolExecutor(4)
-        self.futures = []
+        if self.threads > 1:
+            # optimal thread count may differ based on cpu
+            self.ex = ThreadPoolExecutor(4)
+            self.futures = []
 
     def __call__(self, u, x, y, t, n):
         # Save solution u to a file using numpy.savez
@@ -208,17 +218,25 @@ class PlotAndStoreSolution:
         if n % self.skip_frame != 0:
             return
 
-        # self.plt.imsave(f"{self.casename}_{n:>04}.png", np.kron(u, np.ones((self.scale, self.scale))), cmap='jet', vmin=self.yaxis[0], vmax=self.yaxis[1], origin='lower')
-        f = self.ex.submit(self.plt.imsave, f"{self.casename}_{n:>04}.png", np.kron(u, np.ones((self.scale, self.scale))), cmap='jet', vmin=self.yaxis[0], vmax=self.yaxis[1], origin='lower')
-        self.futures.append(f)
+        if self.scale > 1:
+            # scale image for saving
+            u = np.kron(u, np.ones((self.scale, self.scale)))
+
+        if self.threads > 1:
+            f = self.ex.submit(self.plt.imsave, f"{self.casename}_{n:>04}.png", u, cmap='jet', vmin=self.yaxis[0], vmax=self.yaxis[1], origin='lower')
+            self.futures.append(f)
+        else:
+            self.plt.imsave(f"{self.casename}_{n:>04}.png", u, cmap='jet', vmin=self.yaxis[0], vmax=self.yaxis[1], origin='lower')
+
 
         if n == len(t) - 1:
             self.plt.close()
 
     def saveVideo(self):
-        # make sure all threads completed
-        for f in as_completed(self.futures):
-            pass
+        if self.threads > 1:
+            # make sure all threads completed
+            for f in as_completed(self.futures):
+                pass
 
         filespec = f"{self.casename}_*.png"
         movie_program = 'ffmpeg'
@@ -226,9 +244,56 @@ class PlotAndStoreSolution:
         os.system(cmd)
 
 
-I = lambda x, y: 0 if (x-2.5)**2 + (y-2.5)**2 > 1 else 1
+def plug():
+    Lx = 5
+    Ly = 5
+    rad2 = 1
 
-plotter = PlotAndStoreSolution(scale=1, skip_frame=5, framerate=30)
-u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=[None, None, 0, 0], Lx=5, Ly=5, T=5, dt=0.001, Nx=1000, Ny=1000, callback=plotter)
-plotter.saveVideo()
-print(f"cpu: {cpu}")
+    I = lambda x, y: 0 if (x - Lx / 2)**2 + (y - Ly / 2)**2 > rad2 else 1
+
+    plotter = PlotAndStoreSolution(scale=5, skip_frame=1, framerate=30, threads=2)
+    u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=[None, None, None, None], Lx=Lx, Ly=Ly, T=20, dt=0.01, Nx=100, Ny=100, callback=plotter)
+    plotter.saveVideo()
+    return cpu
+
+# print(f"cpu: {plug()}")
+
+
+########## Tests ##########
+
+def test_quadratic():
+    """Check that u(x, y, t) = x(Lx - x)y(Ly - y)(1 + t/2) is exactly reproduced."""
+
+    Lx = 2.5
+    Ly = 2.5
+    c = 1.5
+    Nx = 6
+    Ny = 6
+    T = 18
+
+    u_exact = lambda x, y, t: x * (Lx - x) * y * (Ly - y) * (1 + 0.5 * t)
+
+    I = lambda x, y: u_exact(x, y, 0)
+
+    V = lambda x, y: 0.5 * u_exact(x, y, 0)
+
+    f = lambda x, y, t: 2 * c * c * (1 + 0.5 * t) * (x * (Lx - x) + y * (Ly - y))
+
+    def assert_no_error(u, x, y, t, n):
+        u_e = u_exact(x, y, t[n])
+        diff = np.abs(u - u_e).max()
+        tol = 1E-13
+        assert diff < tol
+
+    solver(I=I, V=V, f=f, c=c, bds=[0, 0, 0, 0], Lx=Lx, Ly=Ly, T=T, dt=-1, Nx=Nx, Ny=Ny, callback=assert_no_error)
+
+def test_plotter():
+    """Test the plotting class for different values of scale, skip_frame, and threads."""
+    I = lambda x, y: 0 if (x-2.5)**2 + (y-2.5)**2 > 1 else 1
+
+    for scale in (1, 5):
+        for skip_frame in (1, 5):
+            for threads in (1, 4):
+                plotter = PlotAndStoreSolution(scale=scale, skip_frame=skip_frame, threads=threads, framerate=30)
+                solver(I=I, V=0, f=0, c=1, bds=[None, None, None, None], Lx=5, Ly=5, T=1, dt=0.01, Nx=100, Ny=100, callback=plotter)
+                plotter.saveVideo()
