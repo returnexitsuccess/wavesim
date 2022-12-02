@@ -173,14 +173,16 @@ class PlotAndStoreSolution:
             umin=-1, umax=1,
             framerate=4,
             scale=1,
+            plot_energy=False,
             title='',
             skip_frame=1,
             threads=1,
             filename=None):
         self.casename = casename
-        self.yaxis = [umin, umax]
+        self.ranges = [umin, umax]
         self.framerate = framerate
         self.scale = scale
+        self.plot_energy = plot_energy
         self.title = title
         self.skip_frame = skip_frame
         self.threads = threads
@@ -218,15 +220,18 @@ class PlotAndStoreSolution:
         if n % self.skip_frame != 0:
             return
 
+        if self.plot_energy:
+            u = np.log10(u**2)
+
         if self.scale > 1:
             # scale image for saving
             u = np.kron(u, np.ones((self.scale, self.scale)))
 
         if self.threads > 1:
-            f = self.ex.submit(self.plt.imsave, f"{self.casename}_{n:>04}.png", u, cmap='jet', vmin=self.yaxis[0], vmax=self.yaxis[1], origin='lower')
+            f = self.ex.submit(self.plt.imsave, f"{self.casename}_{n:>04}.png", u.T, cmap='jet', vmin=self.ranges[0], vmax=self.ranges[1], origin='lower')
             self.futures.append(f)
         else:
-            self.plt.imsave(f"{self.casename}_{n:>04}.png", u, cmap='jet', vmin=self.yaxis[0], vmax=self.yaxis[1], origin='lower')
+            self.plt.imsave(f"{self.casename}_{n:>04}.png", u.T, cmap='jet', vmin=self.ranges[0], vmax=self.ranges[1], origin='lower')
 
 
         if n == len(t) - 1:
@@ -244,19 +249,54 @@ class PlotAndStoreSolution:
         os.system(cmd)
 
 
-def plug():
-    Lx = 5
-    Ly = 5
-    rad2 = 1
+def plug(Lx=5, Ly=5, rad=1, bds=[0, 0, 0, 0], T=5, Nx=100, Ny=100, scale=10, skip_frame=1, framerate=30, threads=2, plot_energy=True):
+    rad2 = rad * rad
 
     I = lambda x, y: 0 if (x - Lx / 2)**2 + (y - Ly / 2)**2 > rad2 else 1
 
-    plotter = PlotAndStoreSolution(scale=5, skip_frame=1, framerate=30, threads=2)
-    u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=[None, None, None, None], Lx=Lx, Ly=Ly, T=20, dt=0.01, Nx=100, Ny=100, callback=plotter)
+    if plot_energy:
+        umin = -4
+        umax = 0
+    else:
+        umin = -1
+        umax = 1
+
+    plotter = PlotAndStoreSolution(scale=scale, skip_frame=skip_frame, framerate=framerate, threads=threads, plot_energy=plot_energy, umin=umin, umax=umax)
+    u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=bds, Lx=Lx, Ly=Ly, T=T, dt=-1, Nx=Nx, Ny=Ny, callback=plotter)
     plotter.saveVideo()
     return cpu
 
-# print(f"cpu: {plug()}")
+def gaussian(Lx=5, Ly=5, rad=0.2, bds=[0, 0, 0, 0], T=5, Nx=100, Ny=100, scale=10, skip_frame=1, framerate=30, threads=2, plot_energy=True):
+    rad2 = rad * rad
+
+    I = lambda x, y: np.exp(-((x - Lx / 2)**2 + (y - Ly / 2)**2) / (2 * rad2))
+
+    if plot_energy:
+        umin = -4
+        umax = 0
+    else:
+        umin = -1
+        umax = 1
+
+    plotter = PlotAndStoreSolution(scale=scale, skip_frame=skip_frame, framerate=framerate, threads=threads, plot_energy=plot_energy, umin=umin, umax=umax)
+    u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=bds, Lx=Lx, Ly=Ly, T=T, dt=-1, Nx=Nx, Ny=Ny, callback=plotter)
+    plotter.saveVideo()
+    return cpu
+
+def pulse():
+    Lx = 5
+    Ly = 5
+    rad2 = 0.2 * 0.2
+
+    I = lambda x, y: np.exp(-x**2 / (2 * rad2))
+
+    plotter = PlotAndStoreSolution(scale=10, skip_frame=1, framerate=15, plot_energy=False, umin=-1, umax=1)
+    u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=[None, None, None, None], Lx=Lx, Ly=Ly, T=20, dt=-1, Nx=100, Ny=100, callback=plotter)
+    plotter.saveVideo()
+    return cpu
+
+cpu = pulse()
+print(f"cpu: {cpu}")
 
 
 ########## Tests ##########
