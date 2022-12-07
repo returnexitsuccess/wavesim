@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Solve wave equation Dt Dt u = D (c(x,y)^2 D u) + f
 # in 2D rectangular domain on mesh grid with initial conditions I, V
 # and Dirichlet or Neumann boundary conditions
-def solver(I, V, f, c, bds, Lx, Ly, T, dt, Nx, Ny, callback=None):
+def solver(I, V, f, c, bds, Lx, Ly, T, dt, Nx, Ny, callback=None, obstacle=None):
     xs = np.linspace(0, Lx, Nx + 1).reshape((Nx + 1, 1))
     ys = np.linspace(0, Ly, Ny + 1).reshape((1, Ny + 1))
 
@@ -83,9 +83,11 @@ def solver(I, V, f, c, bds, Lx, Ly, T, dt, Nx, Ny, callback=None):
 
     # initial condition
     u_n[1:-1,1:-1] = np.vectorize(I)(xs, ys).astype('float64')
+    if obstacle is not None:
+        u_n[1:-1,1:-1] = obstacle(u=u_n[1:-1,1:-1], x=xs, y=ys)
 
     if callback is not None:
-        callback(u_n[1:-1,1:-1], xs, ys, ts, 0)
+        callback(u_n[1:-1,1:-1], xs, ys, ts, 0, obstacle=obstacle)
 
     # special first timestep formula
     u[1:-1,1:-1] = u_n[1:-1,1:-1] \
@@ -118,8 +120,11 @@ def solver(I, V, f, c, bds, Lx, Ly, T, dt, Nx, Ny, callback=None):
         # Dirichlet
         u[1:-1,-2] = bd_yL(xs, ts[1])[0,:]
 
+    if obstacle is not None:
+        u[1:-1,1:-1] = obstacle(u=u[1:-1,1:-1], x=xs, y=ys)
+
     if callback is not None:
-        callback(u[1:-1,1:-1], xs, ys, ts, 1)
+        callback(u[1:-1,1:-1], xs, ys, ts, 1, obstacle=obstacle)
 
     # reference swap
     u, u_n, u_nm1 = u_nm1, u, u_n
@@ -155,15 +160,18 @@ def solver(I, V, f, c, bds, Lx, Ly, T, dt, Nx, Ny, callback=None):
             # Dirichlet
             u[1:-1,-2] = bd_yL(xs, ts[n])[0,:]
 
+        if obstacle is not None:
+            u[1:-1,1:-1] = obstacle(u=u[1:-1,1:-1], x=xs, y=ys)
+
         if callback is not None:
-            if callback(u[1:-1,1:-1], xs, ys, ts, n+1):
+            if callback(u[1:-1,1:-1], xs, ys, ts, n+1, obstacle=obstacle):
                 break
 
         u, u_n, u_nm1 = u_nm1, u, u_n
 
     u = u_n
     cpu_time = time.process_time() - t0
-    return u[1:-1], xs, ys, ts, cpu_time
+    return u[1:-1,1:-1], xs, ys, ts, cpu_time
 
 
 class PlotAndStoreSolution:
@@ -205,7 +213,7 @@ class PlotAndStoreSolution:
             self.ex = ThreadPoolExecutor(4)
             self.futures = []
 
-    def __call__(self, u, x, y, t, n):
+    def __call__(self, u, x, y, t, n, obstacle=None):
         # Save solution u to a file using numpy.savez
         if self.filename is not None:
             name = f"u{n:>04}"
@@ -221,21 +229,40 @@ class PlotAndStoreSolution:
             return
 
         if self.plot_energy:
-            u = np.log10(u**2)
+            u = np.log10(u**2).clip(min=self.ranges[0], max=self.ranges[1])
 
-        if self.scale > 1:
-            # scale image for saving
-            u = np.kron(u, np.ones((self.scale, self.scale)))
 
         if self.threads > 1:
-            f = self.ex.submit(self.plt.imsave, f"{self.casename}_{n:>04}.png", u.T, cmap='jet', vmin=self.ranges[0], vmax=self.ranges[1], origin='lower')
+            # f = self.ex.submit(self.plt.imsave, f"{self.casename}_{n:>04}.png", u.T, cmap='jet', vmin=self.ranges[0], vmax=self.ranges[1], origin='lower')
+            f = self.ex.submit(self.saveImage, f"{self.casename}_{n:>04}.png", u.T, x, y, obstacle)
             self.futures.append(f)
         else:
-            self.plt.imsave(f"{self.casename}_{n:>04}.png", u.T, cmap='jet', vmin=self.ranges[0], vmax=self.ranges[1], origin='lower')
+            # self.plt.imsave(f"{self.casename}_{n:>04}.png", u.T, cmap='jet', vmin=self.ranges[0], vmax=self.ranges[1], origin='lower')
+            self.saveImage(filename=f"{self.casename}_{n:>04}.png", u=u.T, x=x, y=y, obstacle=obstacle)
 
 
         if n == len(t) - 1:
             self.plt.close()
+
+    def saveImage(self, filename, u, x, y, obstacle=None):
+        u_norminv = 4 * (u - self.ranges[1]) / (self.ranges[0] - self.ranges[1])
+        u_int = np.floor(u_norminv)
+        u_frac = np.floor(255 * (u_norminv - u_int))
+
+        # HSL to RGB for rainbow colors
+        r = 255 * (u_int <= 1) - u_frac * (u_int == 1)
+        g = (u_int <= 3) * (255 - u_frac * (u_int == 3) + (u_frac - 255) * (u_int == 0))
+        b = u_frac * (u_int == 2) + 255 * (u_int >= 3)
+
+        u_c = np.array([r,g,b]).transpose((1,2,0)).astype('uint8')
+        for i in [0, 1, 2]:
+            u_c[:,:,i] = obstacle(u=u_c[:,:,i], x=x, y=y)
+
+        if self.scale > 1:
+            # scale image for saving
+            u_c = np.kron(u_c, np.ones((self.scale, self.scale, 1)).astype('uint8'))
+
+        self.plt.imsave(filename, u_c, origin='lower')
 
     def saveVideo(self):
         if self.threads > 1:
@@ -286,12 +313,22 @@ def gaussian(Lx=5, Ly=5, rad=0.2, bds=[0, 0, 0, 0], T=5, Nx=100, Ny=100, scale=1
 def pulse():
     Lx = 5
     Ly = 5
-    rad2 = 0.2 * 0.2
+    rad2 = 0.1 * 0.1
 
     I = lambda x, y: np.exp(-x**2 / (2 * rad2))
 
-    plotter = PlotAndStoreSolution(scale=10, skip_frame=1, framerate=15, plot_energy=False, umin=-1, umax=1)
-    u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=[None, None, None, None], Lx=Lx, Ly=Ly, T=20, dt=-1, Nx=100, Ny=100, callback=plotter)
+    def o(u, x, y):
+        width = x.size
+        height = y.size
+        x0 = int(width * 2/5)
+        x1 = int(width * 3/5)
+        y0 = int(height * 2/5)
+        y1 = int(height * 3/5)
+        u[x0:x1,y0:y1] = 0
+        return u
+
+    plotter = PlotAndStoreSolution(scale=10, skip_frame=1, framerate=15, plot_energy=True, umin=-2, umax=0, threads=2)
+    u, x, y, t, cpu = solver(I=I, V=0, f=0, c=1, bds=[None, 0, 0, 0], Lx=Lx, Ly=Ly, T=20, dt=-1, Nx=100, Ny=100, callback=plotter, obstacle=o)
     plotter.saveVideo()
     return cpu
 
