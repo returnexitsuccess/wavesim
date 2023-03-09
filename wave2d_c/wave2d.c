@@ -199,7 +199,7 @@ double solver(double c, double dt) {
       }
     }
   }
-  CALLBACK(u_n, xs, ys, 0, 0);
+  CALLBACK(u_n, xs, ys, 0, 0, Nt);
 
   //special first timestep formula
   for (size_t j = 1; j <= NY + 1; ++j) {
@@ -269,7 +269,7 @@ double solver(double c, double dt) {
       u[outer_index] = u[inner_index];
     }
   }
-  CALLBACK(u, xs, ys, dt, 1);
+  CALLBACK(u, xs, ys, dt, 1, Nt);
 
   //reference swap
   temp = u_nm1;
@@ -346,7 +346,7 @@ double solver(double c, double dt) {
         u[outer_index] = u[inner_index];
       }
     }
-    CALLBACK(u, xs, ys, t + dt, n + 1);
+    CALLBACK(u, xs, ys, t + dt, n + 1, Nt);
 
     //reference swap
     temp = u_nm1;

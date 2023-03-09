@@ -7,7 +7,8 @@
 #define ENERGY 1
 
 double solver(double c, double dt);
-void save_frame(double *u, double *xs, double *ys, double t, int n);
+void save_frame(double *u, double *xs, double *ys, double t, int n, int Nt);
+void *threading_helper(void *arguments);
 double plug(double x, double y);
 double zero_velocity(double x, double y);
 double zero_forcing(double x, double y, double t);
