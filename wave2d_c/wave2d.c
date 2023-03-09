@@ -43,6 +43,32 @@
 #define T 10
 #endif
 
+#define NEUMANN 0
+#define DIRICHLET 1
+
+#ifdef ALL_BORDERS
+#define LEFT_BORDER ALL_BORDERS
+#define RIGHT_BORDER ALL_BORDERS
+#define TOP_BORDER ALL_BORDERS
+#define BOTTOM_BORDER ALL_BORDERS
+#endif
+
+#ifndef LEFT_BORDER
+#define LEFT_BORDER NEUMANN
+#endif
+
+#ifndef RIGHT_BORDER
+#define RIGHT_BORDER NEUMANN
+#endif
+
+#ifndef TOP_BORDER
+#define TOP_BORDER NEUMANN
+#endif
+
+#ifndef BOTTOM_BORDER
+#define BOTTOM_BORDER NEUMANN
+#endif
+
 #ifndef CALLBACK
 #define CALLBACK save_frame
 #endif
@@ -120,6 +146,8 @@ int main2() {
   double cpu = solver(1, -0.8);
   printf("cpu: %f\n", cpu);
 
+  free(pixels);
+
   return 0;
 }
 
@@ -152,62 +180,102 @@ double solver(double c, double dt) {
   double Cy2 = dt2 * NY * NY / (LY * LY);
 
   double c2 = c * c;
-  double *q = malloc(sizeof(double) * (NX + 1) * (NY + 1)); //array filled with c(x,y)^2
-  for (size_t index = 0; index < (NX + 1) * (NY + 1); ++index) {
+  double *q = malloc(sizeof(double) * (NX + 3) * (NY + 3)); //array filled with c(x,y)^2
+  for (size_t index = 0; index < (NX + 3) * (NY + 3); ++index) {
     q[index] = c2;
   }
 
-  double *u = malloc(sizeof(double) * (NX + 1) * (NY + 1));
-  double *u_n = malloc(sizeof(double) * (NX + 1) * (NY + 1));
-  double *u_nm1 = malloc(sizeof(double) * (NX + 1) * (NY + 1));
+  double *u = malloc(sizeof(double) * (NX + 3) * (NY + 3));
+  double *u_n = malloc(sizeof(double) * (NX + 3) * (NY + 3));
+  double *u_nm1 = malloc(sizeof(double) * (NX + 3) * (NY + 3));
   double *temp; //used for reference swap later
+
+  memset(u, 0, sizeof(double) * (NX + 3) * (NY + 3));
+  memset(u_n, 0, sizeof(double) * (NX + 3) * (NY + 3));
+  memset(u_nm1, 0, sizeof(double) * (NX + 3) * (NY + 3));
 
   clock_t t0 = clock();
 
   //initial condition
-  for (size_t j = 0; j <= NY; ++j) {
-    for (size_t i = 0; i <= NX; ++i) {
-      size_t index = j * (NX + 1) + i;
-      if (OBSTACLE(xs[i], ys[j])) {
+  for (size_t j = 1; j <= NY + 1; ++j) {
+    for (size_t i = 1; i <= NX + 1; ++i) {
+      size_t index = j * (NX + 3) + i;
+      if (OBSTACLE(xs[i-1], ys[j-1])) {
         u_n[index] = 0;
       }
       else {
-        u_n[index] = INITIAL(xs[i], ys[j]);
+        u_n[index] = INITIAL(xs[i-1], ys[j-1]);
       }
     }
   }
   CALLBACK(u_n, xs, ys, 0, 0);
 
   //special first timestep formula
-  for (size_t j = 0; j <= NY; ++j) {
-    for (size_t i = 0; i <= NX; ++i) {
-      size_t index = j * (NX + 1) + i;
+  for (size_t j = 1; j <= NY + 1; ++j) {
+    for (size_t i = 1; i <= NX + 1; ++i) {
+      size_t index = j * (NX + 3) + i;
 
       //left border
-      if (i == 0) {
+      if (i == 1 && LEFT_BORDER == NEUMANN) {
         u[index] = 0;
       }
       //right border
-      else if (i == NX) {
+      else if (i == NX + 1 && RIGHT_BORDER == NEUMANN) {
         u[index] = 0;
       }
       //top border
-      else if (j == 0) {
+      else if (j == 1 && TOP_BORDER == NEUMANN) {
         u[index] = 0;
       }
       //bottom border
-      else if (j == NX) {
+      else if (j == NY + 1 && BOTTOM_BORDER == NEUMANN) {
         u[index] = 0;
       }
-      else if (OBSTACLE(xs[i], xs[j])) {
+      else if (OBSTACLE(xs[i-1], xs[j-1])) {
         u[index] = 0;
       }
       else {
-        u[index] = u_n[index] + dt * VELOCITY(xs[i], ys[j])
+        u[index] = u_n[index] + dt * VELOCITY(xs[i-1], ys[j-1])
           + 0.25 * Cx2 * ((q[index] + q[index + 1]) * (u_n[index + 1] - u_n[index]) - (q[index] + q[index - 1]) * (u_n[index] - u_n[index - 1]))
-          + 0.25 * Cy2 * ((q[index] + q[index + NX + 1]) * (u_n[index + NX + 1] - u_n[index]) - (q[index] + q[index - NX - 1]) * (u_n[index] - u_n[index - NX - 1]))
-          + 0.5 * dt2 * FORCING(xs[i], ys[j], 0);
+          + 0.25 * Cy2 * ((q[index] + q[index + NX + 3]) * (u_n[index + NX + 3] - u_n[index]) - (q[index] + q[index - NX - 3]) * (u_n[index] - u_n[index - NX - 3]))
+          + 0.5 * dt2 * FORCING(xs[i-1], ys[j-1], 0);
       }
+    }
+  }
+  if (LEFT_BORDER == DIRICHLET) {
+    for (size_t j = 1; j <= NY + 1; ++j) {
+      size_t outer_i = 0;
+      size_t inner_i = 2;
+      size_t outer_index = j * (NX + 3) + outer_i;
+      size_t inner_index = j * (NX + 3) + inner_i;
+      u[outer_index] = u[inner_index];
+    }
+  }
+  if (RIGHT_BORDER == DIRICHLET) {
+    for (size_t j = 1; j <= NY + 1; ++j) {
+      size_t outer_i = NX + 2;
+      size_t inner_i = NX;
+      size_t outer_index = j * (NX + 3) + outer_i;
+      size_t inner_index = j * (NX + 3) + inner_i;
+      u[outer_index] = u[inner_index];
+    }
+  }
+  if (TOP_BORDER == DIRICHLET) {
+    for (size_t i = 1; i <= NX + 1; ++i) {
+      size_t outer_j = 0;
+      size_t inner_j = 2;
+      size_t outer_index = outer_j * (NX + 3) + i;
+      size_t inner_index = inner_j * (NX + 3) + i;
+      u[outer_index] = u[inner_index];
+    }
+  }
+  if (BOTTOM_BORDER == DIRICHLET) {
+    for (size_t i = 1; i <= NX + 1; ++i) {
+      size_t outer_j = NY + 2;
+      size_t inner_j = NY;
+      size_t outer_index = outer_j * (NX + 3) + i;
+      size_t inner_index = inner_j * (NX + 3) + i;
+      u[outer_index] = u[inner_index];
     }
   }
   CALLBACK(u, xs, ys, dt, 1);
@@ -221,34 +289,70 @@ double solver(double c, double dt) {
   //compute each timestep until the end of the simulation
   for (size_t n = 1; n < Nt; ++n) {
     double t = n * dt;
-    for (size_t j = 0; j <= NY; ++j) {
-      for (size_t i = 0; i <= NX; ++i) {
-        size_t index = j * (NX + 1) + i;
+    for (size_t j = 1; j <= NY + 1; ++j) {
+      for (size_t i = 1; i <= NX + 1; ++i) {
+        size_t index = j * (NX + 3) + i;
         //left border
-        if (i == 0) {
+        if (i == 1 && LEFT_BORDER == NEUMANN) {
           u[index] = 0;
         }
         //right border
-        else if (i == NX) {
+        else if (i == NX + 1 && RIGHT_BORDER == NEUMANN) {
           u[index] = 0;
         }
         //top border
-        else if (j == 0) {
+        else if (j == 1 && TOP_BORDER == NEUMANN) {
           u[index] = 0;
         }
         //bottom border
-        else if (j == NX) {
+        else if (j == NY + 1 && BOTTOM_BORDER == NEUMANN) {
           u[index] = 0;
         }
-        else if (OBSTACLE(xs[i], ys[j])) {
+        else if (OBSTACLE(xs[i-1], xs[j-1])) {
           u[index] = 0;
         }
         else {
           u[index] = 2 * u_n[index] - u_nm1[index]
             + 0.5 * Cx2 * ((q[index] + q[index + 1]) * (u_n[index + 1] - u_n[index]) - (q[index] + q[index - 1]) * (u_n[index] - u_n[index - 1]))
-            + 0.5 * Cy2 * ((q[index] + q[index + NX + 1]) * (u_n[index + NX + 1] - u_n[index]) - (q[index] + q[index - NX - 1]) * (u_n[index] - u_n[index - NX - 1]))
-            + dt2 * FORCING(xs[i], ys[j], t);
+            + 0.5 * Cy2 * ((q[index] + q[index + NX + 3]) * (u_n[index + NX + 3] - u_n[index]) - (q[index] + q[index - NX - 3]) * (u_n[index] - u_n[index - NX - 3]))
+            + dt2 * FORCING(xs[i-1], ys[j-1], t);
         }
+      }
+    }
+    if (LEFT_BORDER == DIRICHLET) {
+      for (size_t j = 1; j <= NY + 1; ++j) {
+        size_t outer_i = 0;
+        size_t inner_i = 2;
+        size_t outer_index = j * (NX + 3) + outer_i;
+        size_t inner_index = j * (NX + 3) + inner_i;
+        u[outer_index] = u[inner_index];
+      }
+    }
+    if (RIGHT_BORDER == DIRICHLET) {
+      for (size_t j = 1; j <= NY + 1; ++j) {
+        size_t outer_i = NX + 2;
+        size_t inner_i = NX;
+        size_t outer_index = j * (NX + 3) + outer_i;
+        size_t inner_index = j * (NX + 3) + inner_i;
+        u[outer_index] = u[inner_index];
+      }
+    }
+    if (TOP_BORDER == DIRICHLET) {
+      for (size_t i = 1; i <= NX + 1; ++i) {
+        size_t outer_j = 0;
+        size_t inner_j = 2;
+        size_t outer_index = outer_j * (NX + 3) + i;
+        size_t inner_index = inner_j * (NX + 3) + i;
+        u[outer_index] = u[inner_index];
+      }
+    }
+    if (BOTTOM_BORDER == DIRICHLET) {
+      for (size_t i = 1; i <= NX + 1; ++i) {
+        size_t outer_j = NY + 2;
+        size_t inner_j = NY;
+        size_t outer_index = outer_j * (NX + 3) + i;
+        size_t inner_index = inner_j * (NX + 3) + i;
+        u[outer_index] = u[inner_index];
       }
     }
     CALLBACK(u, xs, ys, t + dt, n + 1);
@@ -262,6 +366,14 @@ double solver(double c, double dt) {
 
   clock_t t1 = clock();
   double cpu = (double) (t1 - t0) / CLOCKS_PER_SEC;
+
+  free(xs);
+  free(ys);
+  free(q);
+  free(u);
+  free(u_n);
+  free(u_nm1);
+
   return cpu;
 }
 
@@ -288,19 +400,20 @@ void save_frame(double *u, double *xs, double *ys, double t, int n) {
 
   uint32_t *pixels = malloc(sizeof(uint32_t) * (NX + 1) * (NY + 1) * IMAGE_SCALE * IMAGE_SCALE);
 
-  for (size_t j = 0; j <= NY; ++j) {
-    for (size_t i = 0; i <= NX; ++i) {
-      size_t index = j * (NX + 1) + i;
-      if (OBSTACLE(xs[i], ys[j])) {
-        pixels[index] = 0xFF000000; //set obstacle to black
+  for (size_t j = 1; j <= NY + 1; ++j) {
+    for (size_t i = 1; i <= NX + 1; ++i) {
+      size_t u_index = j * (NX + 3) + i;
+      uint32_t color;
+      if (OBSTACLE(xs[i-1], ys[j-1])) {
+        color = 0xFF000000; //set obstacle to black
       }
       else {
         double u_norminv;
         if (PLOT_TYPE == LINEAR) {
-          u_norminv = 4 * (u[index] - UMAX) / (UMIN - UMAX);
+          u_norminv = 4 * (u[u_index] - UMAX) / (UMIN - UMAX);
         }
         else if (PLOT_TYPE == ENERGY) {
-          double u2 = u[index] * u[index];
+          double u2 = u[u_index] * u[u_index];
           if (u2 < pow(10, UMIN)) {
             u_norminv = 4;
           }
@@ -341,12 +454,13 @@ void save_frame(double *u, double *xs, double *ys, double t, int n) {
           b = 255;
           break;
         }
-        uint32_t color = (0xFF000000) | (b << 16) | (g << 8) | (r);
-        for (size_t image_i = 0; image_i < IMAGE_SCALE; ++image_i) {
-          for (size_t image_j = 0; image_j < IMAGE_SCALE; ++image_j) {
-            size_t image_index = (IMAGE_SCALE * j + image_j) * (IMAGE_SCALE * (NX + 1)) + (IMAGE_SCALE * i + image_i);
-            pixels[image_index] = color;
-          }
+        color = (0xFF000000) | (b << 16) | (g << 8) | (r);
+      }
+
+      for (size_t image_i = 0; image_i < IMAGE_SCALE; ++image_i) {
+        for (size_t image_j = 0; image_j < IMAGE_SCALE; ++image_j) {
+          size_t image_index = (IMAGE_SCALE * (j - 1) + image_j) * (IMAGE_SCALE * (NX + 1)) + (IMAGE_SCALE * (i - 1) + image_i);
+          pixels[image_index] = color;
         }
       }
     }
