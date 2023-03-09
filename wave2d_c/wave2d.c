@@ -7,7 +7,9 @@
 #include <time.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "./stb_image_write.h"
+#include "stb_image_write.h"
+
+#include "wave2d.h"
 
 // SIMULATION SETTINGS
 
@@ -43,9 +45,6 @@
 #define T 10
 #endif
 
-#define NEUMANN 0
-#define DIRICHLET 1
-
 #ifdef ALL_BORDERS
 #define LEFT_BORDER ALL_BORDERS
 #define RIGHT_BORDER ALL_BORDERS
@@ -78,9 +77,6 @@
 #endif
 
 // PLOTTING SETTINGS
-
-#define LINEAR 0
-#define ENERGY 1
 
 #ifndef PLOT_TYPE
 #define PLOT_TYPE ENERGY
@@ -120,13 +116,6 @@
 #define FILENAME_PREFIX "output"
 #endif
 
-
-double solver(double c, double dt);
-void save_frame(double *u, double *xs, double *ys, double t, int n);
-double plug(double x, double y);
-double zero_velocity(double x, double y);
-double zero_forcing(double x, double y, double t);
-bool zero_obstacle(double x, double y);
 
 int main2() {
   size_t width = 300;

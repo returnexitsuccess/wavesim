@@ -8,12 +8,12 @@
 #define NY 1000
 #define T 10
 
-#define ALL_BORDERS 1
+#define ALL_BORDERS DIRICHLET
 
 #define CALLBACK save_frame
 #define OBSTACLE zero_obstacle
 
-#define PLOT_TYPE 1
+#define PLOT_TYPE ENERGY
 #define UMIN -4
 #define UMAX 0
 

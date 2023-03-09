@@ -1,3 +1,5 @@
+#include "../../wave2d.h"
+
 #define INITIAL plug
 #define VELOCITY zero_velocity
 #define FORCING zero_forcing
@@ -11,7 +13,7 @@
 #define CALLBACK save_frame
 #define OBSTACLE zero_obstacle
 
-#define PLOT_TYPE 1
+#define PLOT_TYPE ENERGY
 #define UMIN -4
 #define UMAX 0
 
