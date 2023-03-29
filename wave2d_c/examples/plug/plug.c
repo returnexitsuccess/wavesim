@@ -1,32 +1,42 @@
-#include "../../wave2d.h"
-
-#define INITIAL plug
-#define VELOCITY zero_velocity
-#define FORCING zero_forcing
-
-#define LX 5
-#define LY 5
-#define NX 1000
-#define NY 1000
-#define T 10
-
-#define CALLBACK save_frame
-#define OBSTACLE zero_obstacle
-
-#define PLOT_TYPE ENERGY
-#define UMIN -4
-#define UMAX 0
-
-#define IMAGE_SCALE 1
-#define SKIP_FRAME 10
-
-#define FILENAME_PREFIX "plug"
-
 #include "../../wave2d.c"
+#include "../../save_frame.c"
+
+SimulationParameters sim_params = {
+  .initial = plug,
+  .velocity = zero_velocity,
+  .forcing = zero_forcing,
+  .Lx = 5,
+  .Ly = 5,
+  .Nx = 1000,
+  .Ny = 1000,
+  .T = 10,
+  .c = 1,
+  .dt = -0.8,
+  .Left_Border = NEUMANN,
+  .Right_Border = NEUMANN,
+  .Top_Border = NEUMANN,
+  .Bottom_Border = NEUMANN,
+  .obstacle = zero_obstacle,
+  .callback = save_frame_callback
+};
+
+PlottingParameters plot_params = {
+  .plot_type = ENERGY,
+  .umin = -4,
+  .umax = 0,
+  .image_scale = 1,
+  .skip_frame = 10,
+  .filename_prefix = "plug",
+  .threading = true
+};
 
 int main() {
-  double cpu = solver(1, -0.8);
+  double cpu = solver(sim_params);
   printf("cpu: %f\n", cpu);
 
   return 0;
+}
+
+void save_frame_callback(double *u, double *xs, double *ys, double t, int n, int Nt, SimulationParameters sim_params) {
+  save_frame(u, xs, ys, t, n, Nt, sim_params, plot_params);
 }
