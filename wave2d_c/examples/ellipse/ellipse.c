@@ -1,8 +1,8 @@
 #include "../../wave2d.c"
 #include "../../save_frame.c"
 
-double small_gaussian(double x, double y, SimulationParameters params);
-bool elliptical_cavity(double x, double y, SimulationParameters params);
+double small_gaussian(double x, double y, SimulationParameters *params);
+bool elliptical_cavity(double x, double y, SimulationParameters *params);
 
 SimulationParameters sim_params = {
   .initial = small_gaussian,
@@ -44,16 +44,16 @@ void save_frame_callback(double *u, double *xs, double *ys, double t, int n, int
   save_frame(u, xs, ys, t, n, Nt, sim_params, plot_params);
 }
 
-double small_gaussian(double x, double y, SimulationParameters params) {
+double small_gaussian(double x, double y, SimulationParameters *params) {
   double rad = 0.01;
-  double cx = params.Lx * (2 - sqrt(3)) / 4.0; // at focal point
-  double cy = params.Ly / 2.0;
+  double cx = params->Lx * (2 - sqrt(3)) / 4.0; // at focal point
+  double cy = params->Ly / 2.0;
 
   return 10 * exp((-(x - cx) * (x - cx) - (y - cy) * (y - cy)) / (2 * rad * rad));
 }
 
-bool elliptical_cavity(double x, double y, SimulationParameters params) {
-  double a = params.Lx / 2.0;
-  double b = params.Ly / 4.0;
-  return (x - params.Lx / 2.0) * (x - params.Lx / 2.0) / (a * a) + (y - params.Ly / 2.0) * (y - params.Ly / 2.0) / (b * b) > 1;
+bool elliptical_cavity(double x, double y, SimulationParameters *params) {
+  double a = params->Lx / 2.0;
+  double b = params->Ly / 4.0;
+  return (x - params->Lx / 2.0) * (x - params->Lx / 2.0) / (a * a) + (y - params->Ly / 2.0) * (y - params->Ly / 2.0) / (b * b) > 1;
 }

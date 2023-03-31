@@ -14,9 +14,9 @@
 enum BoundaryType{NEUMANN, DIRICHLET};
 
 typedef struct SimulationParameters {
-  double (*initial)(double, double, struct SimulationParameters);
-  double (*velocity)(double, double, struct SimulationParameters);
-  double (*forcing)(double, double, double, struct SimulationParameters);
+  double (*initial)(double, double, struct SimulationParameters*);
+  double (*velocity)(double, double, struct SimulationParameters*);
+  double (*forcing)(double, double, double, struct SimulationParameters*);
   double Lx;
   double Ly;
   size_t Nx;
@@ -28,38 +28,15 @@ typedef struct SimulationParameters {
   enum BoundaryType Right_Border;
   enum BoundaryType Top_Border;
   enum BoundaryType Bottom_Border;
-  bool (*obstacle)(double, double, struct SimulationParameters);
+  bool (*obstacle)(double, double, struct SimulationParameters*);
   void (*callback)(double*, double*, double*, double, int, int, struct SimulationParameters);
 } SimulationParameters;
 
 double solver(SimulationParameters params);
-double plug(double x, double y, SimulationParameters params);
-double zero_velocity(double x, double y, SimulationParameters params);
-double zero_forcing(double x, double y, double t, SimulationParameters params);
-bool zero_obstacle(double x, double y, SimulationParameters params);
-
-int main2() {
-  size_t width = 300;
-  size_t height = 300;
-  uint32_t *pixels = malloc(sizeof(uint32_t) * width * height);
-  uint32_t COLOR_RED = 0xFF0000FF;
-  uint32_t COLOR_BLUE = 0xFFFF0000;
-
-  for (size_t j = 0; j < height; ++j) {
-    for (size_t i = 0; i < width; ++i) {
-      pixels[j * width + i] = COLOR_BLUE;
-    }
-  }
-
-  //stbi_write_png("output.png", width, height, 4, pixels, width * 4);
-
-  //double cpu = solver(1, -0.8);
-  //printf("cpu: %f\n", cpu);
-
-  free(pixels);
-
-  return 0;
-}
+double plug(double x, double y, SimulationParameters *params);
+double zero_velocity(double x, double y, SimulationParameters *params);
+double zero_forcing(double x, double y, double t, SimulationParameters *params);
+bool zero_obstacle(double x, double y, SimulationParameters *params);
 
 //solver for dirichlet boundary conditions
 double solver(SimulationParameters params) {
@@ -110,11 +87,11 @@ double solver(SimulationParameters params) {
   for (size_t j = 1; j <= params.Ny + 1; ++j) {
     for (size_t i = 1; i <= params.Nx + 1; ++i) {
       size_t index = j * (params.Nx + 3) + i;
-      if (params.obstacle(xs[i-1], ys[j-1], params)) {
+      if (params.obstacle(xs[i-1], ys[j-1], &params)) {
         u_n[index] = 0;
       }
       else {
-        u_n[index] = params.initial(xs[i-1], ys[j-1], params);
+        u_n[index] = params.initial(xs[i-1], ys[j-1], &params);
       }
     }
   }
@@ -141,14 +118,14 @@ double solver(SimulationParameters params) {
       else if (j == params.Ny + 1 && params.Bottom_Border == NEUMANN) {
         u[index] = 0;
       }
-      else if (params.obstacle(xs[i-1], xs[j-1], params)) {
+      else if (params.obstacle(xs[i-1], xs[j-1], &params)) {
         u[index] = 0;
       }
       else {
-        u[index] = u_n[index] + params.dt * params.velocity(xs[i-1], ys[j-1], params)
+        u[index] = u_n[index] + params.dt * params.velocity(xs[i-1], ys[j-1], &params)
           + 0.25 * Cx2 * ((q[index] + q[index + 1]) * (u_n[index + 1] - u_n[index]) - (q[index] + q[index - 1]) * (u_n[index] - u_n[index - 1]))
           + 0.25 * Cy2 * ((q[index] + q[index + params.Nx + 3]) * (u_n[index + params.Nx + 3] - u_n[index]) - (q[index] + q[index - params.Nx - 3]) * (u_n[index] - u_n[index - params.Nx - 3]))
-          + 0.5 * dt2 * params.forcing(xs[i-1], ys[j-1], 0, params);
+          + 0.5 * dt2 * params.forcing(xs[i-1], ys[j-1], 0, &params);
       }
     }
   }
@@ -218,14 +195,14 @@ double solver(SimulationParameters params) {
         else if (j == params.Ny + 1 && params.Bottom_Border == NEUMANN) {
           u[index] = 0;
         }
-        else if (params.obstacle(xs[i-1], xs[j-1], params)) {
+        else if (params.obstacle(xs[i-1], xs[j-1], &params)) {
           u[index] = 0;
         }
         else {
           u[index] = 2 * u_n[index] - u_nm1[index]
             + 0.5 * Cx2 * ((q[index] + q[index + 1]) * (u_n[index + 1] - u_n[index]) - (q[index] + q[index - 1]) * (u_n[index] - u_n[index - 1]))
             + 0.5 * Cy2 * ((q[index] + q[index + params.Nx + 3]) * (u_n[index + params.Nx + 3] - u_n[index]) - (q[index] + q[index - params.Nx - 3]) * (u_n[index] - u_n[index - params.Nx - 3]))
-            + dt2 * params.forcing(xs[i-1], ys[j-1], t, params);
+            + dt2 * params.forcing(xs[i-1], ys[j-1], t, &params);
         }
       }
     }
@@ -287,9 +264,9 @@ double solver(SimulationParameters params) {
   return cpu;
 }
 
-double plug(double x, double y, SimulationParameters params) {
+double plug(double x, double y, SimulationParameters *params) {
   double rad = 1;
-  if ((x - params.Lx / 2.0) * (x - params.Lx / 2.0) + (y - params.Ly / 2.0) * (y - params.Ly / 2.0) > rad * rad) {
+  if ((x - params->Lx / 2.0) * (x - params->Lx / 2.0) + (y - params->Ly / 2.0) * (y - params->Ly / 2.0) > rad * rad) {
     return 0;
   }
   else {
@@ -297,14 +274,14 @@ double plug(double x, double y, SimulationParameters params) {
   }
 }
 
-double zero_velocity(double x, double y, SimulationParameters params) {
+double zero_velocity(double x, double y, SimulationParameters *params) {
   return 0;
 }
 
-double zero_forcing(double x, double y, double t, SimulationParameters params) {
+double zero_forcing(double x, double y, double t, SimulationParameters *params) {
   return 0;
 }
 
-bool zero_obstacle(double x, double y, SimulationParameters params) {
+bool zero_obstacle(double x, double y, SimulationParameters *params) {
   return false;
 }

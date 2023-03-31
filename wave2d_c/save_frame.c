@@ -68,7 +68,7 @@ void save_frame(double *u, double *xs, double *ys, double t, int n, int Nt, Simu
       for (size_t i = 1; i <= sim_params.Nx + 1; ++i) {
         size_t u_index = j * (sim_params.Nx + 3) + i;
         uint32_t color;
-        if (sim_params.obstacle(xs[i-1], ys[j-1], sim_params)) {
+        if (sim_params.obstacle(xs[i-1], ys[j-1], &sim_params)) {
           color = 0xFF000000; //set obstacle to black
         }
         else {
@@ -87,6 +87,9 @@ void save_frame(double *u, double *xs, double *ys, double t, int n, int Nt, Simu
             else {
               u_norminv = 4 * (log10(u2) - plot_params.umax) / (plot_params.umin - plot_params.umax);
             }
+          } else {
+            fprintf(stderr, "Value of plot_type parameter not recognized");
+            exit(1);
           }
           uint8_t u_int = (uint8_t) u_norminv;
           uint8_t u_frac = (uint8_t) (256 * (u_norminv - u_int));
@@ -117,6 +120,9 @@ void save_frame(double *u, double *xs, double *ys, double t, int n, int Nt, Simu
             g = 0;
             b = 255;
             break;
+          default :
+            fprintf(stderr, "u_int had unexpected value %d", u_int);
+            exit(1);
           }
           color = (0xFF000000) | (b << 16) | (g << 8) | (r);
         }
@@ -178,4 +184,6 @@ void *threading_helper(void *arguments) {
   
   free(args->filename);
   free(args->data);
+
+  return NULL;
 }

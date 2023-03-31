@@ -1,8 +1,8 @@
 #include "../../wave2d.c"
 #include "../../save_frame.c"
 
-double small_plug(double x, double y, SimulationParameters params);
-bool top_left_square(double x, double y, SimulationParameters params);
+double small_plug(double x, double y, SimulationParameters *params);
+bool top_left_square(double x, double y, SimulationParameters *params);
 
 SimulationParameters sim_params = {
   .initial = small_plug,
@@ -44,9 +44,9 @@ void save_frame_callback(double *u, double *xs, double *ys, double t, int n, int
   save_frame(u, xs, ys, t, n, Nt, sim_params, plot_params);
 }
 
-double small_plug(double x, double y, SimulationParameters params) {
+double small_plug(double x, double y, SimulationParameters *params) {
   double rad = 0.1;
-  if ((x - params.Lx / 2.0) * (x - params.Lx / 2.0) + (y - params.Ly / 2.0) * (y - params.Ly / 2.0) > rad * rad) {
+  if ((x - params->Lx / 2.0) * (x - params->Lx / 2.0) + (y - params->Ly / 2.0) * (y - params->Ly / 2.0) > rad * rad) {
     return 0;
   }
   else {
@@ -54,6 +54,6 @@ double small_plug(double x, double y, SimulationParameters params) {
   }
 }
 
-bool top_left_square(double x, double y, SimulationParameters params) {
-    return x >= params.Lx / 5 && x <= params.Lx * 2 / 5 && y >= params.Ly / 5 && y <= params.Ly * 2 / 5;
+bool top_left_square(double x, double y, SimulationParameters *params) {
+    return x >= params->Lx / 5 && x <= params->Lx * 2 / 5 && y >= params->Ly / 5 && y <= params->Ly * 2 / 5;
 }
