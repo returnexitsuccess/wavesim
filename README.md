@@ -13,10 +13,13 @@ Based on the book [Finite difference methods for wave equations](https://hplgit.
 ## Examples
 
 Initial Plug
+
 ![](wave2d_c/examples/plug/output.gif)
 
 Square Obstacle
+
 ![](wave2d_c/examples/obstacle_square/output.gif)
 
 Elliptical Region
+
 ![](wave2d_c/examples/ellipse/output.gif)
