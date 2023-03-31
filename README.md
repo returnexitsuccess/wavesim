@@ -8,12 +8,15 @@ Based on the book [Finite difference methods for wave equations](https://hplgit.
 
 `wave2d/` contains Python simulation of 2-D Wave Equation
 
-`wave2d_c` contains C simulation of 2-D Wave Equation and various examples
+`wave2d_c/` contains C simulation of 2-D Wave Equation and various examples
 
 ## Examples
 
+Initial Plug
 ![](wave2d_c/examples/plug/output.gif)
 
+Square Obstacle
 ![](wave2d_c/examples/obstacle_square/output.gif)
 
+Elliptical Region
 ![](wave2d_c/examples/ellipse/output.gif)
